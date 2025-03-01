@@ -4,6 +4,10 @@
   "description": "VIM's jumplist in vscode(VS Code)",
   "version": "0.0.1",
   "publisher": "bzy-debug",
+  "license": "MIT",
+  "repository": {
+    "url": "https://github.com/bzy-debug/vscode-extension-vim-jumplist"
+  },
   "engines": {
     "vscode": "^1.97.0"
   },
