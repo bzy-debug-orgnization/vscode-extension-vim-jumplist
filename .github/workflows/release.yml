@@ -7,6 +7,8 @@ on:
 
 jobs:
   build:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,7 +18,8 @@ jobs:
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-      - run: npx @vscode/vsce package patch
+      - run: npm version patch -m "%s [skip ci]"
+      - run: npx @vscode/vsce package
       - run: find . -name "*.vsix" | xargs npx @vscode/vsce publish -i
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
