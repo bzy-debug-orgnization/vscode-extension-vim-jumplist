@@ -32,6 +32,11 @@
         "command": "vim-jumplist.jumpForward",
         "title": "Jump List: Jump forward",
         "shortTitle": "Jump forward"
+      },
+      {
+        "command": "vim-jumplist.jump",
+        "title": "Jump List: Jump to point",
+        "shortTitle": "Jump to point"
       }
     ]
   },

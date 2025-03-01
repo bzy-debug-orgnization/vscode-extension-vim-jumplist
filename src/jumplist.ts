@@ -1,30 +1,31 @@
 import * as vscode from "vscode";
 
 class JumpPoint {
-  private _loc: vscode.Location;
-  constructor(loc: vscode.Location) {
-    this._loc = loc;
+  loc: vscode.Location;
+  line: string;
+  constructor(loc: vscode.Location, line: string) {
+    this.loc = loc;
+    this.line = line;
   }
 
   toString(): string {
-    const { uri } = this._loc;
-    const { line, character } = this._loc.range.start;
+    const { uri } = this.loc;
+    const { line, character } = this.loc.range.start;
     return `${JSON.stringify(uri.toString())} ${line + 1}:${character + 1}`;
   }
 
   async jump() {
-    const doc = await vscode.window.showTextDocument(this._loc.uri);
-    doc.revealRange(
-      this._loc.range,
-      vscode.TextEditorRevealType.InCenterIfOutsideViewport,
-    );
+    const start = this.loc.range.start;
+    const selection = new vscode.Selection(start, start);
+    await vscode.window.showTextDocument(this.loc.uri, { selection });
   }
 
   public static currentPoint(textEditor: vscode.TextEditor): JumpPoint {
     const position = textEditor.selection.active;
     const uri = textEditor.document.uri;
     const location = new vscode.Location(uri, position);
-    const point = new JumpPoint(location);
+    const line = textEditor.document.lineAt(position.line).text.trim();
+    const point = new JumpPoint(location, line);
     return point;
   }
 }
@@ -59,6 +60,10 @@ export class JumpList implements vscode.Disposable {
       vscode.commands.registerTextEditorCommand(
         "vim-jumplist.jumpForward",
         this.jumpForward.bind(this),
+      ),
+      vscode.commands.registerCommand(
+        "vim-jumplist.jump",
+        this.jump.bind(this),
       ),
     );
   }
@@ -102,5 +107,19 @@ export class JumpList implements vscode.Disposable {
     const toPoint = this._points[this._index];
     await toPoint.jump();
     this._log.appendLine(`Jump forward to: ${toPoint}`);
+  }
+
+  public jump() {
+    const items: vscode.QuickPickItem[] = this._points.map((point) => {
+      return {
+        label: point.toString(),
+        description: point.line,
+      };
+    });
+    vscode.window.showQuickPick(items).then((item) => {
+      if (!item) {
+        return;
+      }
+    });
   }
 }
