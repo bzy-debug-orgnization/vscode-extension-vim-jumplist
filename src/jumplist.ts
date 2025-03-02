@@ -215,19 +215,12 @@ export class JumpList implements vscode.Disposable {
         (point, i) =>
           new JumpPointQuickPickItem(point, i + 1, timesPad, linePad, colPad),
       );
-      const current = new JumpPointQuickPickItem(
-        currentPoint,
-        0,
-        timesPad,
-        linePad,
-        colPad,
-      );
-      const nextItems = nextPoints.map(
+      const nextItems = [currentPoint, ...nextPoints].map(
         (point, i) =>
-          new JumpPointQuickPickItem(point, i + 1, timesPad, linePad, colPad),
+          new JumpPointQuickPickItem(point, i, timesPad, linePad, colPad),
       );
-      const items = [...prevItems.reverse(), current, ...nextItems];
-      return { items, activeItems: [current] };
+      const items = [...prevItems.reverse(), ...nextItems];
+      return { items, activeItems: [nextItems[0]] };
     }
   }
 
