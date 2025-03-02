@@ -25,14 +25,14 @@ class JumpPoint {
   }
 
   jump() {
-    vscode.window.showTextDocument(this.loc.uri, {
-      selection: this.loc.range,
-    });
+    const { uri, range } = this.loc;
+    vscode.window.showTextDocument(uri, { selection: range });
   }
 
   async peek() {
-    const editor = await vscode.window.showTextDocument(this.loc.uri, {
-      selection: this.loc.range,
+    const { uri, range } = this.loc;
+    const editor = await vscode.window.showTextDocument(uri, {
+      selection: range,
       preserveFocus: true,
       preview: true,
     });
@@ -40,7 +40,7 @@ class JumpPoint {
       backgroundColor: "rgba(250, 240, 170, 0.5)",
     });
     editor.setDecorations(highlightDecoration, [
-      editor.document.lineAt(this.loc.range.start.line).range,
+      editor.document.lineAt(range.start.line).range,
     ]);
     setTimeout(() => {
       highlightDecoration.dispose();
@@ -129,11 +129,20 @@ export class JumpList implements vscode.Disposable {
         "vim-jumplist.jump",
         this.jump.bind(this),
       ),
+      vscode.commands.registerCommand(
+        "vim-jumplist.clear",
+        this.clear.bind(this),
+      ),
     );
   }
 
   dispose() {
     this.disposables.dispose();
+  }
+
+  public clear() {
+    this.list.clear();
+    this.current = undefined;
   }
 
   public register(textEditor: vscode.TextEditor) {
@@ -175,8 +184,10 @@ export class JumpList implements vscode.Disposable {
     }
   }
 
-  public jump() {
-    const quickPick = vscode.window.createQuickPick();
+  private renderItems(): {
+    items: vscode.QuickPickItem[];
+    activeItems: vscode.QuickPickItem[];
+  } {
     if (!this.current) {
       const prevPoints = collectJumpPoints(this.list.iterTail());
       const { timesPad, linePad, colPad } = getPads(prevPoints);
@@ -186,8 +197,7 @@ export class JumpList implements vscode.Disposable {
       );
       const current: vscode.QuickPickItem = new JumpPointQuickPickItem();
       items.push(current);
-      quickPick.items = items;
-      quickPick.activeItems = [current];
+      return { items, activeItems: [current] };
     } else {
       const prevPoints = this.current.prev
         ? collectJumpPoints(this.list.iterPrev(this.current.prev))
@@ -206,7 +216,7 @@ export class JumpList implements vscode.Disposable {
           new JumpPointQuickPickItem(point, i + 1, timesPad, linePad, colPad),
       );
       const current = new JumpPointQuickPickItem(
-        this.current.data,
+        currentPoint,
         0,
         timesPad,
         linePad,
@@ -217,9 +227,18 @@ export class JumpList implements vscode.Disposable {
           new JumpPointQuickPickItem(point, i + 1, timesPad, linePad, colPad),
       );
       const items = [...prevItems.reverse(), current, ...nextItems];
-      quickPick.items = items;
-      quickPick.activeItems = [current];
+      return { items, activeItems: [current] };
     }
+  }
+
+  public jump() {
+    const quickPick = vscode.window.createQuickPick();
+    const { items, activeItems } = this.renderItems();
+    quickPick.items = items;
+    quickPick.activeItems = activeItems;
+    quickPick.onDidHide(() => {
+      quickPick.dispose();
+    });
     quickPick.onDidChangeActive((items) => {
       const item = items[0] as JumpPointQuickPickItem;
       if (item) {

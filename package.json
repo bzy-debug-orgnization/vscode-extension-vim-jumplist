@@ -37,6 +37,11 @@
         "command": "vim-jumplist.jump",
         "title": "Jump List: Jump to point",
         "shortTitle": "Jump to point"
+      },
+      {
+        "command": "vim-jumplist.clear",
+        "title": "Jump List: Clear jump list",
+        "shortTitle": "Clear jump list"
       }
     ]
   },

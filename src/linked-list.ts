@@ -74,6 +74,12 @@ export class LinkedList<T> {
     this.size--;
   }
 
+  clear() {
+    this.head = undefined;
+    this.tail = undefined;
+    this.size = 0;
+  }
+
   *iterPrev(node: Node<T>) {
     let cur: Node<T> | undefined = node;
     while (cur) {
