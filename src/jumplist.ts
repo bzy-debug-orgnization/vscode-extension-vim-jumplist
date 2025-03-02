@@ -134,6 +134,58 @@ export class JumpList implements vscode.Disposable {
         "vim-jumplist.clear",
         this.clear.bind(this),
       ),
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        const { document, contentChanges } = e;
+        for (const node of this.list.iterHead()) {
+          if (node.data.loc.uri.toString() !== document.uri.toString()) {
+            continue;
+          }
+          const point = node.data;
+          for (const change of contentChanges) {
+            const { start, end } = change.range;
+            const { uri, range } = point.loc;
+            if (
+              start.line <= range.start.line &&
+              range.start.line <= end.line
+            ) {
+              point.loc = new vscode.Location(uri, start);
+              point.line = document.lineAt(start.line).text.trim();
+            } else if (end.line < range.start.line) {
+              const deletedLines = end.line - start.line + 1;
+              const addedLines = change.text.split("\n").length;
+              const changedLines = addedLines - deletedLines;
+              if (changedLines !== 0) {
+                point.loc = new vscode.Location(
+                  uri,
+                  range.start.with({
+                    line: range.start.line + changedLines,
+                  }),
+                );
+              }
+            }
+          }
+        }
+      }),
+      vscode.workspace.onDidDeleteFiles((e) => {
+        const { files } = e;
+        for (const node of this.list.iterHead()) {
+          if (
+            files.some((f) => f.toString() === node.data.loc.uri.toString())
+          ) {
+            this.list.remove(node);
+          }
+        }
+      }),
+      vscode.workspace.onDidRenameFiles((e) => {
+        const { files } = e;
+        for (const node of this.list.iterHead()) {
+          for (const { oldUri, newUri } of files) {
+            if (node.data.loc.uri.toString() === oldUri.toString()) {
+              node.data.loc = new vscode.Location(newUri, node.data.loc.range);
+            }
+          }
+        }
+      }),
     );
   }
 
