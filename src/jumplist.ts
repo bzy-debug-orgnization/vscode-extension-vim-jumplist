@@ -1,11 +1,21 @@
 import * as vscode from "vscode";
+import * as uri from "vscode-uri";
+import * as linkedList from "./linked-list";
 
 class JumpPoint {
   loc: vscode.Location;
   line: string;
-  constructor(loc: vscode.Location, line: string) {
+  private constructor(loc: vscode.Location, line: string) {
     this.loc = loc;
     this.line = line;
+  }
+
+  isEqual(other: JumpPoint): boolean {
+    return (
+      this.loc.uri.toString() === other.loc.uri.toString() &&
+      this.loc.range.start.isEqual(other.loc.range.start) &&
+      this.loc.range.end.isEqual(other.loc.range.end)
+    );
   }
 
   toString(): string {
@@ -14,10 +24,27 @@ class JumpPoint {
     return `${JSON.stringify(uri.toString())} ${line + 1}:${character + 1}`;
   }
 
-  async jump() {
-    const start = this.loc.range.start;
-    const selection = new vscode.Selection(start, start);
-    await vscode.window.showTextDocument(this.loc.uri, { selection });
+  jump() {
+    vscode.window.showTextDocument(this.loc.uri, {
+      selection: this.loc.range,
+    });
+  }
+
+  async peek() {
+    const editor = await vscode.window.showTextDocument(this.loc.uri, {
+      selection: this.loc.range,
+      preserveFocus: true,
+      preview: true,
+    });
+    const highlightDecoration = vscode.window.createTextEditorDecorationType({
+      backgroundColor: "rgba(250, 240, 170, 0.5)",
+    });
+    editor.setDecorations(highlightDecoration, [
+      editor.document.lineAt(this.loc.range.start.line).range,
+    ]);
+    setTimeout(() => {
+      highlightDecoration.dispose();
+    }, 350);
   }
 
   public static currentPoint(textEditor: vscode.TextEditor): JumpPoint {
@@ -30,11 +57,46 @@ class JumpPoint {
   }
 }
 
+class JumpPointQuickPickItem implements vscode.QuickPickItem {
+  label: string;
+  description?: string | undefined;
+  _point?: JumpPoint;
+
+  constructor();
+  constructor(
+    point: JumpPoint,
+    i: number,
+    timesPad: number,
+    linePad: number,
+    colPad: number,
+  );
+  constructor(...args: any[]) {
+    if (args.length === 0) {
+      this.label = "";
+    } else {
+      const [point, i, timesPad, linePad, colPad] = args as [
+        JumpPoint,
+        number,
+        number,
+        number,
+        number,
+      ];
+      let filename = uri.Utils.basename(point.loc.uri);
+      const times = `${i}`.padStart(timesPad);
+      const line = `${point.loc.range.start.line + 1}`.padStart(linePad);
+      const col = `${point.loc.range.start.character + 1}`.padStart(colPad);
+      this.label = `${times}: Ln ${line}, Col ${col}  ${filename}`;
+      this.description = point.line;
+      this._point = point;
+    }
+  }
+}
+
 export class JumpList implements vscode.Disposable {
-  private _points: JumpPoint[] = [];
-  private _index: number = 0;
-  private _log: vscode.OutputChannel;
-  private _disposables: vscode.Disposable;
+  private list: linkedList.LinkedList<JumpPoint>;
+  private current: linkedList.Node<JumpPoint> | undefined;
+  private log: vscode.OutputChannel;
+  private disposables: vscode.Disposable;
 
   private static _instance: JumpList;
 
@@ -46,9 +108,11 @@ export class JumpList implements vscode.Disposable {
   }
 
   private constructor() {
-    this._log = vscode.window.createOutputChannel("JumpList");
-    this._disposables = vscode.Disposable.from(
-      this._log,
+    this.log = vscode.window.createOutputChannel("JumpList");
+    this.list = new linkedList.LinkedList();
+    this.current = undefined;
+    this.disposables = vscode.Disposable.from(
+      this.log,
       vscode.commands.registerTextEditorCommand(
         "vim-jumplist.registerJump",
         this.register.bind(this),
@@ -69,57 +133,127 @@ export class JumpList implements vscode.Disposable {
   }
 
   dispose() {
-    this._disposables.dispose();
+    this.disposables.dispose();
   }
 
   public register(textEditor: vscode.TextEditor) {
     const point = JumpPoint.currentPoint(textEditor);
-    this._points.push(point);
-    this._index++;
-    this._log.appendLine(`Register jump point: ${point}`);
+    for (const node of this.list.iterHead()) {
+      if (node.data.isEqual(point)) {
+        this.list.remove(node);
+        break;
+      }
+    }
+    this.list.insertLast(point);
+    this.current = undefined;
+    this.log.appendLine(`Registered jump point: ${point}`);
   }
 
   public async jumpBack(textEditor: vscode.TextEditor) {
-    this._index--;
-
-    if (this._index < 0) {
-      this._index = 0;
-      this._log.appendLine("Already at the beginning of the jump list.");
+    if (this.current === this.list.head) {
+      this.log.appendLine("Already at the beginning of the jump list.");
       return;
     }
 
-    const toPoint = this._points[this._index];
-    if (this._index === this._points.length - 1) {
+    if (!this.current) {
       const currentPoint = JumpPoint.currentPoint(textEditor);
-      this._points.push(currentPoint);
+      this.list.insertLast(currentPoint);
+      this.current = this.list.tail;
     }
-    await toPoint.jump();
-    this._log.appendLine(`Jump back to: ${toPoint}`);
+    if (this.current?.prev) {
+      this.current = this.current.prev;
+      this.current.data.jump();
+    }
   }
 
   public async jumpForward() {
-    this._index++;
-    if (this._index >= this._points.length) {
-      this._index = this._points.length - 1;
-      this._log.appendLine("Already at the end of the jump list.");
-      return;
+    if (this.current?.next) {
+      this.current = this.current.next;
+      this.current.data.jump();
+    } else {
+      this.log.appendLine("Already at the end of the jump list.");
     }
-    const toPoint = this._points[this._index];
-    await toPoint.jump();
-    this._log.appendLine(`Jump forward to: ${toPoint}`);
   }
 
   public jump() {
-    const items: vscode.QuickPickItem[] = this._points.map((point) => {
-      return {
-        label: point.toString(),
-        description: point.line,
-      };
-    });
-    vscode.window.showQuickPick(items).then((item) => {
-      if (!item) {
-        return;
+    const quickPick = vscode.window.createQuickPick();
+    if (!this.current) {
+      const prevPoints = collectJumpPoints(this.list.iterTail());
+      const { timesPad, linePad, colPad } = getPads(prevPoints);
+      const items = prevPoints.map(
+        (point, i) =>
+          new JumpPointQuickPickItem(point, i + 1, timesPad, linePad, colPad),
+      );
+      const current: vscode.QuickPickItem = new JumpPointQuickPickItem();
+      items.push(current);
+      quickPick.items = items;
+      quickPick.activeItems = [current];
+    } else {
+      const prevPoints = this.current.prev
+        ? collectJumpPoints(this.list.iterPrev(this.current.prev))
+        : [];
+      const currentPoint = this.current.data;
+      const nextPoints = this.current.next
+        ? collectJumpPoints(this.list.iterNext(this.current.next))
+        : [];
+      const { timesPad, linePad, colPad } = getPads([
+        ...prevPoints,
+        currentPoint,
+        ...nextPoints,
+      ]);
+      const prevItems = prevPoints.map(
+        (point, i) =>
+          new JumpPointQuickPickItem(point, i + 1, timesPad, linePad, colPad),
+      );
+      const current = new JumpPointQuickPickItem(
+        this.current.data,
+        0,
+        timesPad,
+        linePad,
+        colPad,
+      );
+      const nextItems = nextPoints.map(
+        (point, i) =>
+          new JumpPointQuickPickItem(point, i + 1, timesPad, linePad, colPad),
+      );
+      const items = [...prevItems.reverse(), current, ...nextItems];
+      quickPick.items = items;
+      quickPick.activeItems = [current];
+    }
+    quickPick.onDidChangeActive((items) => {
+      const item = items[0] as JumpPointQuickPickItem;
+      if (item) {
+        item._point?.peek();
       }
     });
+    quickPick.onDidAccept(() => {
+      const item = quickPick.activeItems[0] as JumpPointQuickPickItem;
+      if (item) {
+        item._point?.jump();
+      }
+      quickPick.dispose();
+    });
+    quickPick.show();
   }
+}
+
+function collectJumpPoints(nodes: Generator<linkedList.Node<JumpPoint>>) {
+  const points: JumpPoint[] = [];
+  for (const node of nodes) {
+    points.push(node.data);
+  }
+  return points;
+}
+
+function getPads(points: JumpPoint[]) {
+  let maxLine = -1;
+  let maxCol = -1;
+  for (const point of points) {
+    maxLine = Math.max(maxLine, point.loc.range.start.line);
+    maxCol = Math.max(maxCol, point.loc.range.start.character);
+  }
+  const timesPad = `${points.length + 1}`.length;
+  const linePad = `${maxLine + 1}`.length;
+  const colPad = `${maxCol + 1}`.length;
+  return { timesPad, linePad, colPad };
 }
