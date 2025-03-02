@@ -93,6 +93,7 @@ class JumpPointQuickPickItem implements vscode.QuickPickItem {
 }
 
 export class JumpList implements vscode.Disposable {
+  static readonly MAX_LENGTH = 100;
   private list: linkedList.LinkedList<JumpPoint>;
   private current: linkedList.Node<JumpPoint> | undefined;
   private log: vscode.OutputChannel;
@@ -154,6 +155,9 @@ export class JumpList implements vscode.Disposable {
       }
     }
     this.list.insertLast(point);
+    if (this.list.size > JumpList.MAX_LENGTH) {
+      this.list.remove(this.list.head!);
+    }
     this.current = undefined;
     this.log.appendLine(`Registered jump point: ${point}`);
   }
@@ -167,6 +171,9 @@ export class JumpList implements vscode.Disposable {
     if (!this.current) {
       const currentPoint = JumpPoint.currentPoint(textEditor);
       this.list.insertLast(currentPoint);
+      if (this.list.size > JumpList.MAX_LENGTH) {
+        this.list.remove(this.list.head!);
+      }
       this.current = this.list.tail;
     }
     if (this.current?.prev) {
