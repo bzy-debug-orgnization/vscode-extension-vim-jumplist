@@ -57,14 +57,14 @@ class JumpPoint {
   }
 }
 
-class JumpPointQuickPickItem implements vscode.QuickPickItem {
+class QuickPickItem implements vscode.QuickPickItem {
   label: string;
   description?: string | undefined;
-  _point?: JumpPoint;
+  _node?: linkedList.Node<JumpPoint>;
 
   constructor();
   constructor(
-    point: JumpPoint,
+    node: linkedList.Node<JumpPoint>,
     i: number,
     timesPad: number,
     linePad: number,
@@ -74,20 +74,21 @@ class JumpPointQuickPickItem implements vscode.QuickPickItem {
     if (args.length === 0) {
       this.label = "";
     } else {
-      const [point, i, timesPad, linePad, colPad] = args as [
-        JumpPoint,
+      const [node, i, timesPad, linePad, colPad] = args as [
+        linkedList.Node<JumpPoint>,
         number,
         number,
         number,
         number,
       ];
+      const point = node.data;
       let filename = uri.Utils.basename(point.loc.uri);
       const times = `${i}`.padStart(timesPad);
       const line = `${point.loc.range.start.line + 1}`.padStart(linePad);
       const col = `${point.loc.range.start.character + 1}`.padStart(colPad);
       this.label = `${times}: Ln ${line}, Col ${col}  ${filename}`;
       this.description = point.line;
-      this._point = point;
+      this._node = node;
     }
   }
 }
@@ -248,35 +249,36 @@ export class JumpList implements vscode.Disposable {
     activeItems: vscode.QuickPickItem[];
   } {
     if (!this.current) {
-      const prevPoints = collectJumpPoints(this.list.iterTail());
-      const { timesPad, linePad, colPad } = getPads(prevPoints);
-      const items = prevPoints.map(
-        (point, i) =>
-          new JumpPointQuickPickItem(point, i + 1, timesPad, linePad, colPad),
-      );
-      const current: vscode.QuickPickItem = new JumpPointQuickPickItem();
+      const prevNodes = collect(this.list.iterTail());
+      const { timesPad, linePad, colPad } = getPads(prevNodes);
+      const items = prevNodes
+        .map(
+          (node, i) =>
+            new QuickPickItem(node, i + 1, timesPad, linePad, colPad),
+        )
+        .reverse();
+      const current: vscode.QuickPickItem = new QuickPickItem();
       items.push(current);
       return { items, activeItems: [current] };
     } else {
-      const prevPoints = this.current.prev
-        ? collectJumpPoints(this.list.iterPrev(this.current.prev))
+      const prevNodes = this.current.prev
+        ? collect(this.list.iterPrev(this.current.prev))
         : [];
-      const currentPoint = this.current.data;
-      const nextPoints = this.current.next
-        ? collectJumpPoints(this.list.iterNext(this.current.next))
+      const currentNode = this.current;
+      const nextNodes = this.current.next
+        ? collect(this.list.iterNext(this.current.next))
         : [];
       const { timesPad, linePad, colPad } = getPads([
-        ...prevPoints,
-        currentPoint,
-        ...nextPoints,
+        ...prevNodes,
+        currentNode,
+        ...nextNodes,
       ]);
-      const prevItems = prevPoints.map(
+      const prevItems = prevNodes.map(
         (point, i) =>
-          new JumpPointQuickPickItem(point, i + 1, timesPad, linePad, colPad),
+          new QuickPickItem(point, i + 1, timesPad, linePad, colPad),
       );
-      const nextItems = [currentPoint, ...nextPoints].map(
-        (point, i) =>
-          new JumpPointQuickPickItem(point, i, timesPad, linePad, colPad),
+      const nextItems = [currentNode, ...nextNodes].map(
+        (point, i) => new QuickPickItem(point, i, timesPad, linePad, colPad),
       );
       const items = [...prevItems.reverse(), ...nextItems];
       return { items, activeItems: [nextItems[0]] };
@@ -292,15 +294,16 @@ export class JumpList implements vscode.Disposable {
       quickPick.dispose();
     });
     quickPick.onDidChangeActive((items) => {
-      const item = items[0] as JumpPointQuickPickItem;
+      const item = items[0] as QuickPickItem;
       if (item) {
-        item._point?.peek();
+        item._node?.data.peek();
       }
     });
     quickPick.onDidAccept(() => {
-      const item = quickPick.activeItems[0] as JumpPointQuickPickItem;
+      const item = quickPick.activeItems[0] as QuickPickItem;
       if (item) {
-        item._point?.jump();
+        this.current = item._node;
+        item._node?.data.jump();
       }
       quickPick.dispose();
     });
@@ -308,20 +311,20 @@ export class JumpList implements vscode.Disposable {
   }
 }
 
-function collectJumpPoints(nodes: Generator<linkedList.Node<JumpPoint>>) {
-  const points: JumpPoint[] = [];
-  for (const node of nodes) {
-    points.push(node.data);
+function collect<T>(nodeGen: Generator<linkedList.Node<T>>) {
+  const nodes: linkedList.Node<T>[] = [];
+  for (const node of nodeGen) {
+    nodes.push(node);
   }
-  return points;
+  return nodes;
 }
 
-function getPads(points: JumpPoint[]) {
+function getPads(points: linkedList.Node<JumpPoint>[]) {
   let maxLine = -1;
   let maxCol = -1;
-  for (const point of points) {
-    maxLine = Math.max(maxLine, point.loc.range.start.line);
-    maxCol = Math.max(maxCol, point.loc.range.start.character);
+  for (const { data } of points) {
+    maxLine = Math.max(maxLine, data.loc.range.start.line);
+    maxCol = Math.max(maxCol, data.loc.range.start.character);
   }
   const timesPad = `${points.length + 1}`.length;
   const linePad = `${maxLine + 1}`.length;
