@@ -46,7 +46,3 @@ Setup those keybindings in your `settings.json`:
     }
   ]
 ```
-
-## Roadmap
-
-- [ ] support jumplist stack option
