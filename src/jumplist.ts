@@ -13,8 +13,7 @@ class JumpPoint {
   isEqual(other: JumpPoint): boolean {
     return (
       this.loc.uri.toString() === other.loc.uri.toString() &&
-      this.loc.range.start.isEqual(other.loc.range.start) &&
-      this.loc.range.end.isEqual(other.loc.range.end)
+      this.loc.range.start.line === other.loc.range.start.line
     );
   }
 
