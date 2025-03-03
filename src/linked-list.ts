@@ -74,6 +74,19 @@ export class LinkedList<T> {
     this.size--;
   }
 
+  removeAllAfter(node: Node<T>) {
+    if (!node.next) {
+      return;
+    }
+    let removed = 0;
+    for (const _ of this.iterNext(node)) {
+      removed++;
+    }
+    node.next = undefined;
+    this.tail = node;
+    this.size -= removed;
+  }
+
   clear() {
     this.head = undefined;
     this.tail = undefined;

@@ -57,6 +57,12 @@ class JumpPoint {
   }
 }
 
+function isStack(): boolean {
+  return (
+    vscode.workspace.getConfiguration("vim-jumplist").get("stack") ?? false
+  );
+}
+
 class QuickPickItem implements vscode.QuickPickItem {
   label: string;
   description?: string | undefined;
@@ -97,7 +103,6 @@ export class JumpList implements vscode.Disposable {
   static readonly MAX_LENGTH = 100;
   private list: linkedList.LinkedList<JumpPoint>;
   private current: linkedList.Node<JumpPoint> | undefined;
-  private log: vscode.OutputChannel;
   private disposables: vscode.Disposable;
 
   private static _instance: JumpList;
@@ -110,11 +115,9 @@ export class JumpList implements vscode.Disposable {
   }
 
   private constructor() {
-    this.log = vscode.window.createOutputChannel("JumpList");
     this.list = new linkedList.LinkedList();
     this.current = undefined;
     this.disposables = vscode.Disposable.from(
-      this.log,
       vscode.commands.registerTextEditorCommand(
         "vim-jumplist.registerJump",
         this.register.bind(this),
@@ -201,6 +204,9 @@ export class JumpList implements vscode.Disposable {
 
   public register(textEditor: vscode.TextEditor) {
     const point = JumpPoint.currentPoint(textEditor);
+    if (isStack() && this.current) {
+      this.list.removeAllAfter(this.current);
+    }
     for (const node of this.list.iterHead()) {
       if (node.data.isEqual(point)) {
         this.list.remove(node);
@@ -212,12 +218,10 @@ export class JumpList implements vscode.Disposable {
       this.list.remove(this.list.head!);
     }
     this.current = undefined;
-    this.log.appendLine(`Registered jump point: ${point}`);
   }
 
   public async jumpBack(textEditor: vscode.TextEditor) {
     if (this.current === this.list.head) {
-      this.log.appendLine("Already at the beginning of the jump list.");
       return;
     }
 
@@ -239,8 +243,6 @@ export class JumpList implements vscode.Disposable {
     if (this.current?.next) {
       this.current = this.current.next;
       this.current.data.jump();
-    } else {
-      this.log.appendLine("Already at the end of the jump list.");
     }
   }
 

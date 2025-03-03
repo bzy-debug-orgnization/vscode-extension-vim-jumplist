@@ -17,6 +17,16 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "vim-jumplist",
+      "properties": {
+        "vim-jumplist.stack": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether jumplist behaves like stack. When jumping to a new location from the middle of the jumplist, the locations after the current position will be discarded."
+        }
+      }
+    },
     "commands": [
       {
         "command": "vim-jumplist.registerJump",
