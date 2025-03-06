@@ -84,5 +84,8 @@
   },
   "dependencies": {
     "vscode-uri": "^3.1.0"
-  }
+  },
+  "extensionKind": [
+    "ui"
+  ]
 }
